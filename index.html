@@ -121,7 +121,7 @@
             posY = (t[0].clientY / cameraZoom) - lastY;
         } else if (t.length === 2) {
             const dist = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-            if (dist > 10) { // Dödzon för att undvika mikroskutt
+            if (dist > 5) { 
                 const ratio = dist / initialDist;
                 if (isCameraMode) {
                     cameraZoom = Math.max(1, Math.min(lastCameraZoom * ratio, 10));
