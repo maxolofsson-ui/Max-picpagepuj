@@ -3,49 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Min Rit-app</title>
+    <title>Min Rit-app Pro</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: black; font-family: -apple-system, sans-serif; }
         #camera { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 1; }
-        #overlay { width: 100%; height: 100%; object-fit: contain; position: absolute; z-index: 2; pointer-events: none; top: 0; left: 0; }
-        .controls { position: absolute; bottom: 40px; left: 5%; width: 90%; z-index: 3; background: rgba(255,255,255,0.85); padding: 20px; border-radius: 20px; box-sizing: border-box; backdrop-filter: blur(10px); }
-        input[type=range] { width: 100%; margin-top: 10px; }
-        button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 10px; border: none; background: #007AFF; color: white; font-weight: 600; }
+        .image-container { position: absolute; width: 100%; height: 100%; z-index: 2; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+        #overlay { object-fit: contain; transition: transform 0.1s; }
+        .controls { position: absolute; bottom: 20px; left: 5%; width: 90%; z-index: 3; background: rgba(255,255,255,0.9); padding: 15px; border-radius: 15px; box-sizing: border-box; backdrop-filter: blur(5px); max-height: 40vh; overflow-y: auto; }
+        .row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+        input[type=range] { flex: 1; }
+        button { flex: 1; padding: 10px; border-radius: 8px; border: none; background: #007AFF; color: white; font-weight: 600; font-size: 12px; }
+        .btn-red { background: #FF3B30; }
     </style>
 </head>
 <body>
+
 <video id="camera" autoplay playsinline></video>
-<img id="overlay" src="" style="display:none;">
-<div class="controls">
-    <button onclick="document.getElementById('fileInput').click()">Välj bild att rita av</button>
-    <input type="file" id="fileInput" style="display:none;" accept="image/*">
-    <label>Genomskinlighet:</label>
-    <input type="range" id="opacity" min="0" max="1" step="0.1" value="0.5">
+<div class="image-container">
+    <img id="overlay" src="" style="display:none;">
 </div>
+
+<div class="controls">
+    <div class="row">
+        <button onclick="document.getElementById('fileInput').click()">Välj bild</button>
+        <button id="toggleBtn" onclick="toggleImage()">Visa/Dölj bild</button>
+        <button id="lockBtn" class="btn-red" onclick="toggleLock()">Lås fokus</button>
+    </div>
+    <input type="file" id="fileInput" style="display:none;" accept="image/*">
+    
+    <div class="row"><label>Styrka:</label><input type="range" id="opacity" min="0" max="1" step="0.1" value="0.5"></div>
+    <div class="row"><label>Zoom:</label><input type="range" id="zoom" min="0.1" max="3" step="0.05" value="1"></div>
+    <div class="row"><label>X-led:</label><input type="range" id="posX" min="-200" max="200" step="1" value="0"></div>
+    <div class="row"><label>Y-led:</label><input type="range" id="posY" min="-200" max="200" step="1" value="0"></div>
+</div>
+
 <script>
     const video = document.getElementById('camera');
     const overlay = document.getElementById('overlay');
-    const opacitySlider = document.getElementById('opacity');
-    const fileInput = document.getElementById('fileInput');
+    const zoomS = document.getElementById('zoom');
+    const posX = document.getElementById('posX');
+    const posY = document.getElementById('posY');
+    const opacityS = document.getElementById('opacity');
+    let isLocked = false;
+
     async function startCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-            video.srcObject = stream;
-        } catch (err) { alert("Kameran kunde inte startas. Ge tillåtelse i Safari."); }
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video.srcObject = stream;
     }
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                overlay.src = event.target.result;
-                overlay.style.display = "block";
-                overlay.style.opacity = opacitySlider.value;
-            };
-            reader.readAsDataURL(file);
+
+    function updateTransform() {
+        overlay.style.transform = `scale(${zoomS.value}) translate(${posX.value}px, ${posY.value}px)`;
+        overlay.style.opacity = opacityS.value;
+    }
+
+    function toggleImage() {
+        overlay.style.display = (overlay.style.display === 'none') ? 'block' : 'none';
+    }
+
+    function toggleLock() {
+        const btn = document.getElementById('lockBtn');
+        if (!isLocked) {
+            video.pause(); // Fryser videobilden för att "låsa" fokus
+            btn.innerText = "Lås upp fokus";
+            btn.style.background = "#4CD964";
+        } else {
+            video.play();
+            btn.innerText = "Lås fokus";
+            btn.style.background = "#FF3B30";
         }
+        isLocked = !isLocked;
+    }
+
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => { overlay.src = ev.target.result; overlay.style.display = 'block'; };
+        reader.readAsDataURL(e.target.files[0]);
     });
-    opacitySlider.addEventListener('input', (e) => { overlay.style.opacity = e.target.value; });
+
+    [zoomS, posX, posY, opacityS].forEach(el => el.addEventListener('input', updateTransform));
     startCamera();
 </script>
 </body>
