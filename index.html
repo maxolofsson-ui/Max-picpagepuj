@@ -61,6 +61,7 @@
     let initialDist = 0, mirror = 1;
     let isCameraMode = false, isTicking = false;
     let lastScale = 1, lastCameraZoom = 1;
+    let isZooming = false; // Flagga för att förhindra hopp
 
     async function startCamera() {
         try {
@@ -102,6 +103,7 @@
             lastX = (t[0].clientX / cameraZoom) - posX;
             lastY = (t[0].clientY / cameraZoom) - posY;
         } else if (t.length === 2) {
+            isZooming = true;
             initialDist = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
             lastScale = scale;
             lastCameraZoom = cameraZoom;
@@ -112,14 +114,12 @@
         const t = e.touches;
         e.preventDefault();
         
-        if (t.length === 1 && !isCameraMode) {
-            // Panorera bilden
+        if (t.length === 1 && !isCameraMode && !isZooming) {
             posX = (t[0].clientX / cameraZoom) - lastX;
             posY = (t[0].clientY / cameraZoom) - lastY;
         } else if (t.length === 2) {
-            // Zooma
             const dist = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-            if (dist > 10) {
+            if (dist > 5) {
                 const ratio = dist / initialDist;
                 if (isCameraMode) {
                     cameraZoom = Math.max(1, Math.min(lastCameraZoom * ratio, 10));
@@ -130,6 +130,17 @@
         }
         requestUpdate();
     }, { passive: false });
+
+    container.addEventListener('touchend', e => {
+        if (e.touches.length === 0) {
+            // Kort fördröjning för att förhindra "fantom-panorering" efter zoom
+            setTimeout(() => { isZooming = false; }, 100);
+        } else if (e.touches.length === 1) {
+            // Om vi går från 2 fingrar till 1, kalibrera om lastX/Y för att undvika hopp
+            lastX = (e.touches[0].clientX / cameraZoom) - posX;
+            lastY = (e.touches[0].clientY / cameraZoom) - posY;
+        }
+    });
 
     document.getElementById('fileInput').addEventListener('change', (e) => {
         const file = e.target.files[0];
