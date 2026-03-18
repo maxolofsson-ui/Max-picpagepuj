@@ -3,30 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Rit-app Touch Pro</title>
+    <title>Rit-app Touch Ultra</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: black; font-family: -apple-system, sans-serif; }
         #camera { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 1; }
-        #overlay-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; display: flex; align-items: center; justify-content: center; overflow: hidden; pointer-events: auto; }
-        #overlay { position: absolute; max-width: none; max-height: none; pointer-events: none; user-select: none; }
-        .controls { position: absolute; bottom: 30px; left: 5%; width: 90%; z-index: 3; background: rgba(255,255,255,0.85); padding: 20px; border-radius: 20px; backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(0,0,0,0.3); box-sizing: border-box; }
-        button { width: 100%; padding: 15px; border-radius: 12px; border: none; background: #007AFF; color: white; font-weight: 600; font-size: 16px; margin-bottom: 15px; }
-        label { font-size: 14px; color: #333; font-weight: 500; display: block; margin-bottom: 5px; }
-        input[type=range] { width: 100%; height: 30px; }
+        #overlay-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        #overlay { position: absolute; max-width: none; max-height: none; pointer-events: none; user-select: none; transform-origin: center center; }
+        
+        .reset-btn { position: absolute; top: 20px; right: 20px; z-index: 4; background: rgba(255,255,255,0.7); border: none; border-radius: 50%; width: 44px; height: 44px; font-size: 24px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        
+        .controls { position: absolute; bottom: 30px; left: 5%; width: 90%; z-index: 3; background: rgba(255,255,255,0.85); padding: 20px; border-radius: 20px; backdrop-filter: blur(10px); box-sizing: border-box; }
+        button#selectBtn { width: 100%; padding: 15px; border-radius: 12px; border: none; background: #007AFF; color: white; font-weight: 600; font-size: 16px; margin-bottom: 10px; }
+        label { font-size: 13px; color: #333; margin-bottom: 5px; display: block; font-weight: 500; }
+        input[type=range] { width: 100%; }
     </style>
 </head>
 <body>
 
 <video id="camera" autoplay playsinline></video>
+<button class="reset-btn" onclick="resetImage()">↺</button>
+
 <div id="overlay-container">
     <img id="overlay" src="" style="display:none;">
 </div>
 
 <div class="controls">
-    <button onclick="document.getElementById('fileInput').click()">Välj bild att rita av</button>
+    <button id="selectBtn" onclick="document.getElementById('fileInput').click()">Välj bild att rita av</button>
     <input type="file" id="fileInput" style="display:none;" accept="image/*">
     <label>Genomskinlighet:</label>
-    <input type="range" id="opacity" min="0" max="1" step="0.1" value="0.5">
+    <input type="range" id="opacity" min="0" max="1" step="0.05" value="0.5">
 </div>
 
 <script>
@@ -34,7 +39,7 @@
     const overlay = document.getElementById('overlay');
     const container = document.getElementById('overlay-container');
     const opacityS = document.getElementById('opacity');
-    
+
     let scale = 1, lastScale = 1;
     let posX = 0, posY = 0;
     let startX = 0, startY = 0;
@@ -52,7 +57,11 @@
         overlay.style.opacity = opacityS.value;
     }
 
-    // Touch-hantering för flytt och zoom
+    function resetImage() {
+        scale = 1; posX = 0; posY = 0;
+        updateTransform();
+    }
+
     container.addEventListener('touchstart', e => {
         if (e.touches.length === 1) {
             startX = e.touches[0].clientX - posX;
@@ -60,6 +69,9 @@
         } else if (e.touches.length === 2) {
             initialDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
             lastScale = scale;
+            // För att kunna flytta samtidigt som man zoomar
+            startX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - posX;
+            startY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - posY;
         }
     }, { passive: false });
 
@@ -71,6 +83,9 @@
         } else if (e.touches.length === 2) {
             const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
             scale = lastScale * (dist / initialDist);
+            // Uppdatera position mitt emellan fingrarna för smidig flytt vid zoom
+            posX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - startX;
+            posY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - startY;
         }
         updateTransform();
     }, { passive: false });
@@ -80,10 +95,9 @@
         reader.onload = (ev) => { 
             overlay.src = ev.target.result; 
             overlay.style.display = 'block';
-            scale = 1; posX = 0; posY = 0;
-            updateTransform();
+            resetImage();
         };
-        reader.readAsDataURL(e.target.files[0]);
+        reader.readAsDataURL(e.target.files);
     });
 
     opacityS.addEventListener('input', updateTransform);
