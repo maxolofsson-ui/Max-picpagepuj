@@ -6,24 +6,30 @@
     <title>Rit-app Smooth Pro</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: black; font-family: -apple-system, sans-serif; }
-        #camera { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 1; }
+        #camera-container { position: absolute; width: 100%; height: 100%; overflow: hidden; z-index: 1; }
+        #camera { width: 100%; height: 100%; object-fit: cover; will-change: transform; }
         #overlay-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; overflow: hidden; display: flex; align-items: center; justify-content: center; touch-action: none; }
         #overlay { position: absolute; max-width: 80%; max-height: 80%; pointer-events: none; user-select: none; display: none; will-change: transform, opacity; transform-origin: center center; }
         
         .top-btns { position: absolute; top: 20px; right: 20px; z-index: 4; display: flex; gap: 10px; }
         .circle-btn { background: rgba(255,255,255,0.7); border: none; border-radius: 50%; width: 44px; height: 44px; font-size: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.3); backdrop-filter: blur(5px); }
+        .circle-btn.active { background: #FF3B30; color: white; }
         
         .controls { position: absolute; bottom: 30px; left: 5%; width: 90%; z-index: 3; background: rgba(255,255,255,0.85); padding: 15px; border-radius: 20px; backdrop-filter: blur(10px); box-sizing: border-box; transition: opacity 0.3s; }
         .btn-row { display: flex; gap: 10px; margin-top: 10px; }
         button#selectBtn { width: 100%; padding: 15px; border-radius: 12px; border: none; background: #007AFF; color: white; font-weight: 600; font-size: 16px; }
         .sec-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #ccc; background: white; font-size: 14px; }
-        label { font-size: 12px; color: #333; margin-bottom: 5px; display: block; font-weight: 600; text-transform: uppercase; }
-        input[type=range] { width: 100%; margin: 10px 0; }
+        label { font-size: 11px; color: #333; margin-bottom: 2px; display: block; font-weight: 700; text-transform: uppercase; }
+        input[type=range] { width: 100%; margin: 8px 0; }
+        .status-badge { position: absolute; top: 20px; left: 20px; padding: 5px 12px; background: rgba(0,0,0,0.5); color: white; border-radius: 20px; font-size: 12px; z-index: 4; display: none; }
     </style>
 </head>
 <body>
 
-<video id="camera" autoplay playsinline></video>
+<div id="status" class="status-badge">Kameraläge: Zoom aktiv</div>
+<div id="camera-container">
+    <video id="camera" autoplay playsinline></video>
+</div>
 
 <div class="top-btns">
     <button id="lockBtn" class="circle-btn" onclick="toggleLock()">🔓</button>
@@ -42,7 +48,7 @@
         <button class="sec-btn" onclick="mirrorImage()">↔ Spegelvänd</button>
     </div>
 
-    <label style="margin-top:15px;">Genomskinlighet:</label>
+    <label style="margin-top:10px;">Genomskinlighet:</label>
     <input type="range" id="opacity" min="0" max="1" step="0.05" value="0.5">
 </div>
 
@@ -52,7 +58,9 @@
     const container = document.getElementById('overlay-container');
     const opacityS = document.getElementById('opacity');
     const controls = document.getElementById('controlsPanel');
+    const statusBadge = document.getElementById('status');
 
+    let videoTrack = null;
     let scale = 1, lastScale = 1;
     let posX = 0, posY = 0;
     let lastX = 0, lastY = 0;
@@ -61,18 +69,32 @@
     let isLocked = false;
     let isTicking = false;
 
+    // Kamerazoom variabler
+    let cameraZoom = 1;
+    let lastCameraZoom = 1;
+
     async function startCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment", focusMode: "continuous" } 
+                video: { facingMode: "environment" } 
             });
             video.srcObject = stream;
-        } catch (err) { alert("Kameran kunde inte startas. Kolla behörigheter."); }
+            videoTrack = stream.getVideoTracks()[0];
+        } catch (err) { alert("Kameran kunde inte startas."); }
     }
 
     function updateTransform() {
+        // Uppdatera bildens transform
         overlay.style.transform = `translate(${posX}px, ${posY}px) scale(${scale * mirror}, ${scale})`;
         overlay.style.opacity = opacityS.value;
+        
+        // Uppdatera kamerans zoom (Digital backup om hårdvaruzoom inte stöds)
+        if (isLocked) {
+            video.style.transform = `scale(${cameraZoom})`;
+        } else {
+            video.style.transform = `scale(1)`;
+        }
+        
         isTicking = false;
     }
 
@@ -83,17 +105,40 @@
         }
     }
 
-    function resetImage() {
-        scale = 1; posX = 0; posY = 0; mirror = 1;
-        lastScale = 1; lastX = 0; lastY = 0;
-        requestUpdate();
+    async function applyHardwareZoom(zoomLevel) {
+        if (!videoTrack) return;
+        try {
+            const capabilities = videoTrack.getCapabilities();
+            if (capabilities.zoom) {
+                const z = Math.max(capabilities.zoom.min, Math.min(zoomLevel, capabilities.zoom.max));
+                await videoTrack.applyConstraints({ advanced: [{ zoom: z }] });
+            }
+        } catch (e) {
+            // Hårdvaruzoom stöds inte, vi använder CSS-skalning som fallback i updateTransform
+        }
     }
 
     function toggleLock() {
         isLocked = !isLocked;
-        document.getElementById('lockBtn').innerText = isLocked ? "🔒" : "🔓";
-        container.style.pointerEvents = isLocked ? "none" : "auto";
-        controls.style.opacity = isLocked ? "0.1" : "1";
+        const btn = document.getElementById('lockBtn');
+        btn.innerText = isLocked ? "🔒" : "🔓";
+        btn.classList.toggle('active', isLocked);
+        
+        statusBadge.style.display = isLocked ? "block" : "none";
+        controls.style.opacity = isLocked ? "0.2" : "1";
+        
+        if (!isLocked) {
+            cameraZoom = 1;
+            applyHardwareZoom(1);
+            requestUpdate();
+        }
+    }
+
+    function resetImage() {
+        scale = 1; posX = 0; posY = 0; mirror = 1; cameraZoom = 1;
+        lastScale = 1; lastX = 0; lastY = 0;
+        applyHardwareZoom(1);
+        requestUpdate();
     }
 
     function mirrorImage() {
@@ -102,35 +147,50 @@
     }
 
     container.addEventListener('touchstart', e => {
-        if (isLocked) return;
         const touches = e.touches;
         if (touches.length === 1) {
-            lastX = touches[0].clientX - posX;
-            lastY = touches[0].clientY - posY;
+            if (!isLocked) {
+                lastX = touches[0].clientX - posX;
+                lastY = touches[0].clientY - posY;
+            }
         } else if (touches.length === 2) {
             initialDist = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
-            lastScale = scale;
-            const midX = (touches[0].clientX + touches[1].clientX) / 2;
-            const midY = (touches[0].clientY + touches[1].clientY) / 2;
-            lastX = midX - posX;
-            lastY = midY - posY;
+            if (isLocked) {
+                lastCameraZoom = cameraZoom;
+            } else {
+                lastScale = scale;
+                const midX = (touches[0].clientX + touches[1].clientX) / 2;
+                const midY = (touches[0].clientY + touches[1].clientY) / 2;
+                lastX = midX - posX;
+                lastY = midY - posY;
+            }
         }
-    }, { passive: false });
+    });
 
     container.addEventListener('touchmove', e => {
-        if (isLocked) return;
         e.preventDefault();
         const touches = e.touches;
-        if (touches.length === 1) {
+        
+        if (touches.length === 1 && !isLocked) {
             posX = touches[0].clientX - lastX;
             posY = touches[0].clientY - lastY;
-        } else if (touches.length === 2) {
+        } 
+        else if (touches.length === 2) {
             const dist = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
-            scale = lastScale * (dist / initialDist);
-            const midX = (touches[0].clientX + touches[1].clientX) / 2;
-            const midY = (touches[0].clientY + touches[1].clientY) / 2;
-            posX = midX - lastX;
-            posY = midY - lastY;
+            const ratio = dist / initialDist;
+            
+            if (isLocked) {
+                // Zooma kameran istället för bilden
+                cameraZoom = Math.max(1, Math.min(lastCameraZoom * ratio, 5));
+                applyHardwareZoom(cameraZoom);
+            } else {
+                // Zooma bilden som vanligt
+                scale = lastScale * ratio;
+                const midX = (touches[0].clientX + touches[1].clientX) / 2;
+                const midY = (touches[0].clientY + touches[1].clientY) / 2;
+                posX = midX - lastX;
+                posY = midY - lastY;
+            }
         }
         requestUpdate();
     }, { passive: false });
