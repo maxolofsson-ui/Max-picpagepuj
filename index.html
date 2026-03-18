@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Rit-app Touch Pro Final</title>
+    <title>Rit-app Smooth Pro</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: black; font-family: -apple-system, sans-serif; }
         #camera { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 1; }
-        #overlay-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-        #overlay { position: absolute; max-width: 80%; max-height: 80%; pointer-events: none; user-select: none; display: none; will-change: transform; }
+        #overlay-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; overflow: hidden; display: flex; align-items: center; justify-content: center; touch-action: none; }
+        #overlay { position: absolute; max-width: 80%; max-height: 80%; pointer-events: none; user-select: none; display: none; will-change: transform, opacity; }
         .reset-btn { position: absolute; top: 20px; right: 20px; z-index: 4; background: rgba(255,255,255,0.7); border: none; border-radius: 50%; width: 44px; height: 44px; font-size: 24px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
         .controls { position: absolute; bottom: 30px; left: 5%; width: 90%; z-index: 3; background: rgba(255,255,255,0.85); padding: 20px; border-radius: 20px; backdrop-filter: blur(10px); box-sizing: border-box; }
         button#selectBtn { width: 100%; padding: 15px; border-radius: 12px; border: none; background: #007AFF; color: white; font-weight: 600; font-size: 16px; margin-bottom: 10px; }
@@ -38,13 +38,11 @@
     const container = document.getElementById('overlay-container');
     const opacityS = document.getElementById('opacity');
 
-    let scale = 1;
-    let translateX = 0;
-    let translateY = 0;
-    
-    let lastScale = 1;
-    let lastX = 0;
-    let lastY = 0;
+    let scale = 1, lastScale = 1;
+    let posX = 0, posY = 0;
+    let lastX = 0, lastY = 0;
+    let initialDist = 0;
+    let isTicking = false;
 
     async function startCamera() {
         try {
@@ -54,47 +52,54 @@
     }
 
     function updateTransform() {
-        overlay.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        overlay.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
         overlay.style.opacity = opacityS.value;
+        isTicking = false;
+    }
+
+    function requestUpdate() {
+        if (!isTicking) {
+            requestAnimationFrame(updateTransform);
+            isTicking = true;
+        }
     }
 
     function resetImage() {
-        scale = 1; translateX = 0; translateY = 0;
+        scale = 1; posX = 0; posY = 0;
         lastScale = 1; lastX = 0; lastY = 0;
-        updateTransform();
+        requestUpdate();
     }
 
     container.addEventListener('touchstart', e => {
-        if (e.touches.length === 1) {
-            lastX = e.touches[0].clientX - translateX;
-            lastY = e.touches[0].clientY - translateY;
-        } else if (e.touches.length === 2) {
+        const touches = e.touches;
+        if (touches.length === 1) {
+            lastX = touches[0].clientX - posX;
+            lastY = touches[0].clientY - posY;
+        } else if (touches.length === 2) {
+            initialDist = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
             lastScale = scale;
-            const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-            this.initialDist = dist;
-            
-            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-            lastX = midX - translateX;
-            lastY = midY - translateY;
+            const midX = (touches[0].clientX + touches[1].clientX) / 2;
+            const midY = (touches[0].clientY + touches[1].clientY) / 2;
+            lastX = midX - posX;
+            lastY = midY - posY;
         }
     }, { passive: false });
 
     container.addEventListener('touchmove', e => {
         e.preventDefault();
-        if (e.touches.length === 1) {
-            translateX = e.touches[0].clientX - lastX;
-            translateY = e.touches[0].clientY - lastY;
-        } else if (e.touches.length === 2) {
-            const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-            scale = lastScale * (dist / this.initialDist);
-            
-            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-            translateX = midX - lastX;
-            translateY = midY - lastY;
+        const touches = e.touches;
+        if (touches.length === 1) {
+            posX = touches[0].clientX - lastX;
+            posY = touches[0].clientY - lastY;
+        } else if (touches.length === 2) {
+            const dist = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+            scale = lastScale * (dist / initialDist);
+            const midX = (touches[0].clientX + touches[1].clientX) / 2;
+            const midY = (touches[0].clientY + touches[1].clientY) / 2;
+            posX = midX - lastX;
+            posY = midY - lastY;
         }
-        updateTransform();
+        requestUpdate();
     }, { passive: false });
 
     document.getElementById('fileInput').addEventListener('change', (e) => {
@@ -110,7 +115,7 @@
         }
     });
 
-    opacityS.addEventListener('input', updateTransform);
+    opacityS.addEventListener('input', requestUpdate);
     startCamera();
 </script>
 </body>
