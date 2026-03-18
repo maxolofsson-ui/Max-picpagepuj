@@ -105,7 +105,6 @@
             initialDist = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
             lastScale = scale;
             lastCameraZoom = cameraZoom;
-            // Viktigt: Beräkna mittpunkt vid zoomstart för att undvika "skutt"
             const midX = (t[0].clientX + t[1].clientX) / 2;
             const midY = (t[0].clientY + t[1].clientY) / 2;
             lastX = (midX / cameraZoom) - posX;
@@ -122,17 +121,17 @@
             posY = (t[0].clientY / cameraZoom) - lastY;
         } else if (t.length === 2) {
             const dist = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-            const ratio = dist / initialDist;
-            
-            if (isCameraMode) {
-                cameraZoom = Math.max(1, Math.min(lastCameraZoom * ratio, 10));
-            } else {
-                scale = lastScale * ratio;
-                // Uppdatera position baserat på mittpunkt även under move
-                const midX = (t[0].clientX + t[1].clientX) / 2;
-                const midY = (t[0].clientY + t[1].clientY) / 2;
-                posX = (midX / cameraZoom) - lastX;
-                posY = (midY / cameraZoom) - posY;
+            if (dist > 10) { // Dödzon för att undvika mikroskutt
+                const ratio = dist / initialDist;
+                if (isCameraMode) {
+                    cameraZoom = Math.max(1, Math.min(lastCameraZoom * ratio, 10));
+                } else {
+                    scale = lastScale * ratio;
+                    const midX = (t[0].clientX + t[1].clientX) / 2;
+                    const midY = (t[0].clientY + t[1].clientY) / 2;
+                    posX = (midX / cameraZoom) - lastX;
+                    posY = (midY / cameraZoom) - posY;
+                }
             }
         }
         requestUpdate();
